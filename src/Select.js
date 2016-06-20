@@ -68,6 +68,7 @@ const Select = React.createClass({
 		onBlur: React.PropTypes.func,               // onBlur handler: function (event) {}
 		onBlurResetsInput: React.PropTypes.bool,    // whether input is cleared on blur
 		onChange: React.PropTypes.func,             // onChange handler: function (newValue) {}
+		onNewItem: React.PropTypes.func,            // onNewItem will be called if you try add new item
 		onClose: React.PropTypes.func,              // fires when the menu is closed
 		onFocus: React.PropTypes.func,              // onFocus handler: function (event) {}
 		onInputChange: React.PropTypes.func,        // onInputChange handler: function (inputValue) {}
@@ -144,7 +145,7 @@ const Select = React.createClass({
 		return {
 			inputValue: '',
 			isFocused: false,
-			isLoading: false,
+			isLoading: 'isLoading' in this.props ? this.props.isLoading : false,
 			isOpen: false,
 			isPseudoFocused: false,
 			required: false,
@@ -170,11 +171,18 @@ const Select = React.createClass({
 
 	componentWillReceiveProps(nextProps) {
 		const valueArray = this.getValueArray(nextProps.value);
+		const toUpdate = {};
+
+		if (nextProps.isLoading !== this.state.isLoading) {
+			toUpdate.isLoading = nextProps.isLoading;
+		}
 
 		if (nextProps.required) {
-			this.setState({
-				required: this.handleRequired(valueArray[0], nextProps.multi),
-			});
+			toUpdate.required = this.handleRequired(valueArray[0], nextProps.multi);
+		}
+
+		if (Object.keys(toUpdate).length) {
+			this.setState(toUpdate);
 		}
 	},
 
@@ -412,7 +420,26 @@ const Select = React.createClass({
 			case 13: // enter
 				if (!this.state.isOpen) return;
 				event.stopPropagation();
-				this.selectFocusedOption();
+
+				if (this._focusedOption) {
+					this.selectFocusedOption();
+				} else if (typeof this.props.onNewItem === 'function') {
+					var item = {};
+					var result = this.props.onNewItem(this.state.inputValue);
+
+					if (result) {
+						// if it's promise
+						if(typeof result.then === 'function') {
+							this.setState({ isLoading: true });
+							result.then(item => {
+								this.setState({ isLoading: false });
+								this.selectValue(item);
+							})
+						} else {
+							this.selectValue(result);
+						}
+					}
+				}
 			break;
 			case 27: // escape
 				if (this.state.isOpen) {
@@ -662,7 +689,7 @@ const Select = React.createClass({
 	},
 
 	renderLoading () {
-		if (!this.props.isLoading) return;
+		if (!this.state.isLoading) return;
 		return (
 			<span className="Select-loading-zone" aria-hidden="true">
 				<span className="Select-loading" />
@@ -776,7 +803,7 @@ const Select = React.createClass({
 	},
 
 	renderClear () {
-		if (!this.props.clearable || !this.props.value || (this.props.multi && !this.props.value.length) || this.props.disabled || this.props.isLoading) return;
+		if (!this.props.clearable || !this.props.value || (this.props.multi && !this.props.value.length) || this.props.disabled || this.state.isLoading) return;
 		return (
 			<span className="Select-clear-zone" title={this.props.multi ? this.props.clearAllText : this.props.clearValueText}
 						aria-label={this.props.multi ? this.props.clearAllText : this.props.clearValueText}
@@ -970,7 +997,7 @@ const Select = React.createClass({
 			'Select--single': !this.props.multi,
 			'is-disabled': this.props.disabled,
 			'is-focused': this.state.isFocused,
-			'is-loading': this.props.isLoading,
+			'is-loading': this.state.isLoading,
 			'is-open': isOpen,
 			'is-pseudo-focused': this.state.isPseudoFocused,
 			'is-searchable': this.props.searchable,

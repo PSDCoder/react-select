@@ -31,7 +31,8 @@ var taskConfig = {
 		],
 		less: [
 			'example.less'
-		]
+		],
+		port: process.env.PORT || 8000
 	}
 
 };
