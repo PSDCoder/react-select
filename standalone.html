@@ -34,8 +34,12 @@
 			},
 			render () {
 				return React.createElement(Select, {
+					multi: true,
 					options: options,
 					onChange: this.updateValue,
+					onNewItem: function (item) {
+						console.log(item);
+					},
 					value: this.state.value,
 				});
 			}
