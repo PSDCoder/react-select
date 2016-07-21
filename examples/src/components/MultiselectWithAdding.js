@@ -38,7 +38,7 @@ var MultiSelectField = React.createClass({
 
 		return new Promise((resolve, reject) => {
 			this.state.options.push(item);
-			setTimeout(() => resolve(item), 2500);
+			setTimeout(() => resolve(item), 1000);
 		});
 	},
 	toggleIsLoading () {
@@ -49,12 +49,12 @@ var MultiSelectField = React.createClass({
 			<div className="section">
 				<h3 className="section-heading">{this.props.label}</h3>
 				<Select
-					multi 
-					value={this.state.values} 
-					placeholder="Select your favourite(s) or try add new" 
-					options={this.state.options} 
+					multi
+					value={this.state.values}
+					placeholder="Select your favourite(s) or try add new"
+					options={this.state.options}
 					isLoading={this.state.isLoading}
-					onChange={this.handleSelectChange} 
+					onChange={this.handleSelectChange}
 					onNewItem={this.handleNewItem}
 				/>
 

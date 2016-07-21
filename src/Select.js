@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 import Input from 'react-input-autosize';
 import classNames from 'classnames';
+import blacklist from 'blacklist';
 
 import stripDiacritics from './utils/stripDiacritics';
 
@@ -170,7 +171,7 @@ const Select = React.createClass({
 	},
 
 	componentWillReceiveProps(nextProps) {
-		const valueArray = this.getValueArray(nextProps.value);
+		const valueArray = this.getValueArray(nextProps.value, nextProps);
 		const toUpdate = {};
 
 		if (nextProps.isLoading !== this.state.isLoading) {
@@ -299,8 +300,14 @@ const Select = React.createClass({
 			// Call focus() again here to be safe.
 			this.focus();
 
-			// clears value so that the cursor will be a the end of input then the component re-renders
-			this.refs.input.getInput().value = '';
+			let input = this.refs.input;
+			if (typeof input.getInput === 'function') {
+				// Get the actual DOM input if the ref is an <Input /> component
+				input = input.getInput();
+			}
+
+			// clears the value so that the cursor will be at the end of input when the component re-renders
+			input.value = '';
 
 			// if the input is focused, ensure the menu is open
 			this.setState({
@@ -444,8 +451,10 @@ const Select = React.createClass({
 			case 27: // escape
 				if (this.state.isOpen) {
 					this.closeMenu();
+					event.stopPropagation();
 				} else if (this.props.clearable && this.props.escapeClearsValue) {
 					this.clearValue(event);
+					event.stopPropagation();
 				}
 			break;
 			case 38: // up
@@ -502,22 +511,35 @@ const Select = React.createClass({
 		return op[this.props.labelKey];
 	},
 
-	getValueArray (value) {
-		if (this.props.multi) {
-			if (typeof value === 'string') value = value.split(this.props.delimiter);
+	/**
+	 * Turns a value into an array from the given options
+	 * @param	{String|Number|Array}	value		- the value of the select input
+	 * @param	{Object}		nextProps	- optionally specify the nextProps so the returned array uses the latest configuration
+	 * @returns	{Array}	the value of the select represented in an array
+	 */
+	getValueArray (value, nextProps) {
+		/** support optionally passing in the `nextProps` so `componentWillReceiveProps` updates will function as expected */
+		const props = typeof nextProps === 'object' ? nextProps : this.props;
+		if (props.multi) {
+			if (typeof value === 'string') value = value.split(props.delimiter);
 			if (!Array.isArray(value)) {
 				if (value === null || value === undefined) return [];
 				value = [value];
 			}
-			return value.map(this.expandValue).filter(i => i);
+			return value.map(value => this.expandValue(value, props)).filter(i => i);
 		}
-		var expandedValue = this.expandValue(value);
+		var expandedValue = this.expandValue(value, props);
 		return expandedValue ? [expandedValue] : [];
 	},
 
-	expandValue (value) {
+	/**
+	 * Retrieve a value from the given options and valueKey
+	 * @param	{String|Number|Array}	value	- the selected value(s)
+	 * @param	{Object}		props	- the Select component's props (or nextProps)
+	 */
+	expandValue (value, props) {
 		if (typeof value !== 'string' && typeof value !== 'number') return value;
-		let { options, valueKey } = this.props;
+		let { options, valueKey } = props;
 		if (!options) return;
 		for (var i = 0; i < options.length; i++) {
 			if (options[i][valueKey] === value) return options[i];
@@ -540,20 +562,23 @@ const Select = React.createClass({
 	},
 
 	selectValue (value) {
+		//NOTE: update value in the callback to make sure the input value is empty so that there are no sttyling issues (Chrome had issue otherwise)
 		this.hasScrolledToOption = false;
 		if (this.props.multi) {
-			this.addValue(value);
 			this.setState({
 				inputValue: '',
 				focusedIndex: null
+			}, () => {
+				this.addValue(value);
 			});
 		} else {
 			this.setState({
 				isOpen: false,
 				inputValue: '',
 				isPseudoFocused: this.state.isFocused,
+			}, () => {
+				this.setValue(value);
 			});
-			this.setValue(value);
 		}
 	},
 
@@ -746,18 +771,18 @@ const Select = React.createClass({
 
 			const ariaOwns = classNames({
 				[this._instancePrefix + '-list']: isOpen,
-				[this._instancePrefix + '-backspace-remove-message']: this.props.multi &&
-																	  !this.props.disabled &&
-																	  this.state.isFocused &&
-																      !this.state.inputValue
+				[this._instancePrefix + '-backspace-remove-message']: this.props.multi
+					&& !this.props.disabled
+					&& this.state.isFocused
+					&& !this.state.inputValue
 			});
 
 			// TODO: Check how this project includes Object.assign()
 			const inputProps = Object.assign({}, this.props.inputProps, {
-			    role: 'combobox',
+				role: 'combobox',
 				'aria-expanded': '' + isOpen,
-			    'aria-owns': ariaOwns,
-			    'aria-haspopup': '' + isOpen,
+				'aria-owns': ariaOwns,
+				'aria-haspopup': '' + isOpen,
 				'aria-activedescendant': isOpen ? this._instancePrefix + '-option-' + focusedOptionIndex : this._instancePrefix + '-value',
 				'aria-labelledby': this.props['aria-labelledby'],
 				'aria-label': this.props['aria-label'],
@@ -772,9 +797,10 @@ const Select = React.createClass({
 			});
 
 			if (this.props.disabled || !this.props.searchable) {
+				const divProps = blacklist(this.props.inputProps, 'inputClassName');
 				return (
 					<div
-						{...this.props.inputProps}
+						{...divProps}
 						role="combobox"
 						aria-expanded={isOpen}
 						aria-owns={isOpen ? this._instancePrefix + '-list' : this._instancePrefix + '-value'}
@@ -803,7 +829,7 @@ const Select = React.createClass({
 	},
 
 	renderClear () {
-		if (!this.props.clearable || !this.props.value || (this.props.multi && !this.props.value.length) || this.props.disabled || this.state.isLoading) return;
+		if (!this.props.clearable || !this.props.value || (this.props.multi && !this.props.value.length) || this.props.disabled || this.props.isLoading) return;
 		return (
 			<span className="Select-clear-zone" title={this.props.multi ? this.props.clearAllText : this.props.clearValueText}
 						aria-label={this.props.multi ? this.props.clearAllText : this.props.clearValueText}
@@ -997,7 +1023,7 @@ const Select = React.createClass({
 			'Select--single': !this.props.multi,
 			'is-disabled': this.props.disabled,
 			'is-focused': this.state.isFocused,
-			'is-loading': this.state.isLoading,
+			'is-loading': this.props.isLoading,
 			'is-open': isOpen,
 			'is-pseudo-focused': this.state.isPseudoFocused,
 			'is-searchable': this.props.searchable,
